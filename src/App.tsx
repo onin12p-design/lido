@@ -460,7 +460,8 @@ export default function App() {
           <main>
             {viewMode === "map" ? (
               <BedMap
-                bookings={filteredBookings}
+                bookings={bookings}
+                searchQuery={searchQuery}
                 onSelectBed={(bedNum) => setSelectedBed(bedNum)}
               />
             ) : (

@@ -216,10 +216,58 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
       </div>
 
       {error && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl flex items-start gap-3 text-sm">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          <span>{error}</span>
-        </div>
+        (() => {
+          const isBillingError = error.toLowerCase().includes("prepayment") || 
+                                error.toLowerCase().includes("429") || 
+                                error.toLowerCase().includes("resource_exhausted") ||
+                                error.toLowerCase().includes("crediti prepagati");
+          
+          if (isBillingError) {
+            return (
+              <div className="bg-amber-50 border border-amber-200 text-amber-950 p-5 rounded-2xl flex flex-col md:flex-row gap-4 items-start shadow-xs">
+                <div className="p-2.5 bg-amber-100 text-amber-700 rounded-xl shrink-0">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div className="space-y-2 flex-1">
+                  <h4 className="font-bold text-sm text-amber-900">⚠️ Crediti o Limiti API Esauriti (Google AI Studio)</h4>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    Il server ha risposto con un errore <strong>429 (Resource Exhausted)</strong>. Questo indica che i crediti gratuiti o prepagati associati alla tua chiave API di Gemini sono attualmente esauriti o in fase di elaborazione da parte di Google.
+                  </p>
+                  <div className="bg-white/70 p-3 rounded-xl border border-amber-200/40 text-xs text-amber-900 space-y-1">
+                    <p className="font-semibold">Cosa fare adesso:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-1 text-[11px] text-amber-800">
+                      <li>Se hai appena aggiunto i fondi o configurato la fatturazione sul tuo account, attendi <strong>5-10 minuti</strong> affinché Google attivi la chiave a livello globale.</li>
+                      <li>Verifica il credito residuo o imposta la ricarica automatica nella console di Google AI Studio.</li>
+                    </ul>
+                  </div>
+                  <div className="pt-1 flex flex-wrap gap-2">
+                    <a
+                      href="https://ai.studio/projects"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3.5 py-2 rounded-lg transition-colors shadow-xs"
+                    >
+                      Gestisci Fatturazione AI Studio
+                    </a>
+                    <button
+                      onClick={() => setError(null)}
+                      className="inline-flex items-center text-xs font-bold text-amber-800 hover:text-amber-950 px-3 py-2 rounded-lg hover:bg-amber-100/50 transition-colors"
+                    >
+                      Riprova Scansione
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl flex items-start gap-3 text-sm">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          );
+        })()
       )}
 
       {successMessage && (

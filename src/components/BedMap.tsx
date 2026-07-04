@@ -4,10 +4,11 @@ import { Armchair, Shield, Sun, Users } from "lucide-react";
 
 interface BedMapProps {
   bookings: Booking[];
+  searchQuery?: string;
   onSelectBed: (bedNumber: number) => void;
 }
 
-export default function BedMap({ bookings, onSelectBed }: BedMapProps) {
+export default function BedMap({ bookings, searchQuery = "", onSelectBed }: BedMapProps) {
   // Get all bookings for a specific bed number
   const getBedBookings = (bedNum: number | null): Booking[] => {
     if (bedNum === null) return [];
@@ -55,12 +56,35 @@ export default function BedMap({ bookings, onSelectBed }: BedMapProps) {
       }
     }
 
+    const queryTrimmed = searchQuery.trim().toLowerCase();
+    let isMatch = true;
+    let hasActiveFilter = queryTrimmed.length > 0;
+
+    if (hasActiveFilter) {
+      const matchesBedNum = bedNum.toString() === queryTrimmed;
+      const matchesBookings = bedBookings.some((b) => {
+        const matchesName = b.customerName.toLowerCase().includes(queryTrimmed);
+        const matchesNotes = b.notes ? b.notes.toLowerCase().includes(queryTrimmed) : false;
+        return matchesName || matchesNotes;
+      });
+      isMatch = matchesBedNum || matchesBookings;
+    }
+
+    let matchClass = "";
+    if (hasActiveFilter) {
+      if (isMatch) {
+        matchClass = "ring-4 ring-amber-500 scale-105 z-10 transition-all duration-200 animate-pulse";
+      } else {
+        matchClass = "opacity-20 scale-95 saturate-50 hover:opacity-60 transition-all duration-200";
+      }
+    }
+
     return (
       <button
         id={`bed-btn-${bedNum}`}
         key={key}
         onClick={() => onSelectBed(bedNum)}
-        className={`relative flex flex-col items-center justify-between p-1.5 aspect-square rounded-xl border text-center transition-all cursor-pointer shadow-xs ${bgStyle}`}
+        className={`relative flex flex-col items-center justify-between p-1.5 aspect-square rounded-xl border text-center transition-all cursor-pointer shadow-xs ${bgStyle} ${matchClass}`}
       >
         {/* Bed Number */}
         <div className="flex items-center justify-between w-full">

@@ -103,6 +103,7 @@ Restituisci l'elenco completo esclusivamente in formato JSON strutturato con lo 
     };
 
     let allCombinedBookings: any[] = [];
+    const fileErrors: { name: string; error: string }[] = [];
 
     // Process all files in parallel for maximum speed and efficiency
     await Promise.all(
@@ -179,12 +180,37 @@ Restituisci l'elenco completo esclusivamente in formato JSON strutturato con lo 
               allCombinedBookings = [...allCombinedBookings, ...parsed];
             }
           }
-        } catch (fileErr) {
+        } catch (fileErr: any) {
           console.error(`Errore durante l'elaborazione del file ${fileItem.name || 'sconosciuto'}:`, fileErr);
-          // Let other files continue processing
+          const errorMsg = fileErr.message || String(fileErr);
+          fileErrors.push({
+            name: fileItem.name || "sconosciuto",
+            error: errorMsg,
+          });
         }
       })
     );
+
+    // Check if we have billing/quota issues and return a highly informative error
+    const billingError = fileErrors.find(
+      (e) =>
+        e.error.includes("prepayment credits are depleted") ||
+        e.error.includes("RESOURCE_EXHAUSTED") ||
+        e.error.includes("429")
+    );
+
+    if (billingError) {
+      return res.status(402).json({
+        error: "Crediti prepagati esauriti su Google AI Studio. Per favore, ricarica il tuo saldo o aggiorna i dettagli di pagamento su https://ai.studio/ nella sezione 'Billing' per sbloccare l'API di Gemini e riprendere a scansionare i file.",
+      });
+    }
+
+    if (allCombinedBookings.length === 0 && fileErrors.length > 0) {
+      const combinedErrorMsg = fileErrors.map((fe) => `${fe.name}: ${fe.error}`).join("; ");
+      return res.status(500).json({
+        error: `Impossibile analizzare i file: ${combinedErrorMsg}`,
+      });
+    }
 
     // Deduplicate bookings that might overlap exactly (e.g. same bed and slot across files)
     const uniqueBookingsMap = new Map();
