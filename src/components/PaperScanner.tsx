@@ -52,7 +52,9 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      Array.from(files).forEach((file) => processFile(file));
+      for (let i = 0; i < files.length; i++) {
+        processFile(files[i]);
+      }
     }
   };
 

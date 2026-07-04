@@ -30,6 +30,9 @@ import {
   Clock,
   Check,
   Zap,
+  Search,
+  X,
+  SlidersHorizontal,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -45,6 +48,18 @@ export default function App() {
   const [quickAddSlot, setQuickAddSlot] = useState<"morning" | "afternoon" | "full_day">("full_day");
   const [quickAddType, setQuickAddType] = useState<"daily" | "subscriber">("daily");
   const [quickAddError, setQuickAddError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredBookings = bookings.filter((booking) => {
+    if (!searchQuery.trim()) return true;
+    
+    const queryLower = searchQuery.toLowerCase().trim();
+    const matchesName = booking.customerName.toLowerCase().includes(queryLower);
+    const matchesNotes = booking.notes ? booking.notes.toLowerCase().includes(queryLower) : false;
+    const matchesBed = booking.bedNumber.toString() === queryLower;
+
+    return matchesName || matchesNotes || matchesBed;
+  });
 
   // Sync bookings in real-time for the selected date
   useEffect(() => {
@@ -301,12 +316,45 @@ export default function App() {
             </button>
           </div>
 
-          {/* Quick Info Tip */}
-          <div className="hidden md:flex items-center gap-2 text-xs text-slate-400">
-            <Clock className="w-4 h-4 text-amber-500" />
-            <span>Fasce: Mattutina, Pomeridiana o Giornata Intera.</span>
+          {/* Quick Search Bar */}
+          <div className="relative w-full sm:w-72">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cerca cliente, note o n° lettino..."
+              className="pl-9 pr-8 py-2 border border-slate-200 hover:border-slate-300 rounded-xl bg-slate-50/50 text-xs text-slate-700 placeholder-slate-400 outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all w-full"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-md hover:bg-slate-200/60 transition-colors cursor-pointer"
+                title="Cancella ricerca"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </section>
+
+        {/* Notifica di Filtro Attivo */}
+        {searchQuery && (
+          <div className="bg-indigo-50 border border-indigo-100 px-4 py-2.5 rounded-xl flex items-center justify-between text-xs text-indigo-800">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-500" />
+              <span>
+                Filtro attivo per <strong>"{searchQuery}"</strong>. Trovate <strong>{filteredBookings.length}</strong> prenotazioni corrispondenti.
+              </span>
+            </div>
+            <button 
+              onClick={() => setSearchQuery("")}
+              className="font-bold hover:underline cursor-pointer text-indigo-600"
+            >
+              Mostra tutti
+            </button>
+          </div>
+        )}
 
         {/* QUICK MANUAL ADD DRAWER / ACCORDION */}
         <AnimatePresence>
@@ -396,7 +444,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* SUMMARY STATS PANEL */}
-        <StatsSummary bookings={bookings} totalBeds={ALL_BED_NUMBERS.length} date={selectedDate} />
+        <StatsSummary bookings={filteredBookings} totalBeds={ALL_BED_NUMBERS.length} date={selectedDate} />
 
         {/* LOADING INDICATOR */}
         {isLoading && (
@@ -412,7 +460,7 @@ export default function App() {
           <main>
             {viewMode === "map" ? (
               <BedMap
-                bookings={bookings}
+                bookings={filteredBookings}
                 onSelectBed={(bedNum) => setSelectedBed(bedNum)}
               />
             ) : (
