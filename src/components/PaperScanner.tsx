@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { Upload, FileText, AlertCircle, Loader2, Sparkles, Check, Trash2, Edit2, AlertTriangle } from "lucide-react";
+import { Upload, FileText, AlertCircle, Loader2, Sparkles, Check, Trash2, AlertTriangle } from "lucide-react";
 import { Booking, SlotType, CustomerType } from "../types";
 
 interface PaperScannerProps {
@@ -17,10 +17,15 @@ interface ScannedBooking {
   isSelected: boolean;
 }
 
+interface UploadedFileItem {
+  id: string;
+  name: string;
+  preview: string; // Base64
+  isWord: boolean;
+}
+
 export default function PaperScanner({ date, existingBookings, onImportBookings }: PaperScannerProps) {
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [isWordFile, setIsWordFile] = useState(false);
+  const [filesList, setFilesList] = useState<UploadedFileItem[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanningStep, setScanningStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -29,41 +34,31 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Steps for loading animations
   const steps = [
-    "Invio foto della tabella a Gemini AI...",
-    "Lettura della scrittura a mano...",
-    "Analisi dei lettini occupati e delle note...",
-    "Generazione della mappa digitale delle prenotazioni...",
+    "Caricamento dei file sul server...",
+    "Estrazione del testo dai documenti Word...",
+    "Gemini AI sta analizzando le tabelle in parallelo...",
+    "Aggregazione delle prenotazioni rilevate...",
   ];
 
-  // Run the loader steps sequence
   const startLoadingAnimation = () => {
     setScanningStep(0);
     const interval = setInterval(() => {
-      setScanningStep((prev) => {
-        if (prev >= steps.length - 1) {
-          clearInterval(interval);
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, 2500);
+      setScanningStep((prev) => (prev >= steps.length - 1 ? prev : prev + 1));
+    }, 2000);
     return interval;
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      processFile(file);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      Array.from(files).forEach((file) => processFile(file));
     }
   };
 
   const processFile = (file: File) => {
     setError(null);
     setSuccessMessage(null);
-    setScannedResults([]);
-    setFileName(file.name);
 
     const isDoc = file.name.toLowerCase().endsWith(".docx") || 
                   file.name.toLowerCase().endsWith(".doc") || 
@@ -71,22 +66,32 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
                   file.type === "application/msword";
 
     if (!file.type.startsWith("image/") && !isDoc) {
-      setError("Seleziona un'immagine valida o un documento Word (.docx, .doc)");
+      setError("Seleziona un'immagine valida o un documento Word (.docx)");
       return;
     }
 
-    setIsWordFile(isDoc);
-
     const reader = new FileReader();
     reader.onloadend = () => {
-      setImagePreview(reader.result as string);
+      setFilesList((prev) => [
+        ...prev,
+        {
+          id: Math.random().toString(36).substring(2, 9),
+          name: file.name,
+          preview: reader.result as string,
+          isWord: isDoc
+        }
+      ]);
     };
     reader.readAsDataURL(file);
   };
 
+  const removeFile = (id: string) => {
+    setFilesList((prev) => prev.filter((f) => f.id !== id));
+  };
+
   const handleScanSubmit = async () => {
-    if (!imagePreview) {
-      setError("Carica un file prima di iniziare la scansione");
+    if (filesList.length === 0) {
+      setError("Carica almeno un file prima di avviare la scansione");
       return;
     }
 
@@ -100,9 +105,12 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          image: imagePreview,
+          files: filesList.map((f) => ({
+            image: f.preview,
+            isWord: f.isWord,
+            name: f.name
+          })),
           date,
-          isWord: isWordFile,
         }),
       });
 
@@ -110,7 +118,7 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
       clearInterval(intervalId);
 
       if (!response.ok) {
-        throw new Error(data.error || "Errore sconosciuto del server");
+        throw new Error(data.error || "Errore del server durante l'analisi dei file");
       }
 
       if (data.bookings && Array.isArray(data.bookings)) {
@@ -124,11 +132,11 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
         }));
         setScannedResults(mapped);
       } else {
-        throw new Error("I dati restituiti da Gemini non sono nel formato corretto.");
+        throw new Error("Formato dati non valido ricevuto dall'AI.");
       }
     } catch (err: any) {
       clearInterval(intervalId);
-      setError("Impossibile analizzare la tabella: " + (err.message || err));
+      setError("Errore scansione: " + (err.message || err));
     } finally {
       setIsScanning(false);
     }
@@ -170,18 +178,17 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
       }));
 
       await onImportBookings(formatted);
-      setSuccessMessage(`Scansione completata con successo! ${formatted.length} prenotazioni aggiunte per il giorno ${date}.`);
+      setSuccessMessage(`Importazione riuscita! Aggiunte ${formatted.length} prenotazioni per il giorno ${date}.`);
       setScannedResults([]);
-      setImagePreview(null);
+      setFilesList([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err: any) {
-      setError("Errore durante l'importazione: " + (err.message || err));
+      setError("Errore durante il salvataggio: " + (err.message || err));
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Helper: check if there's an existing reservation for this bed and slot
   const checkOverlap = (bedNum: number, slot: SlotType) => {
     return existingBookings.some((b) => {
       if (b.bedNumber !== bedNum) return false;
@@ -190,15 +197,19 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
     });
   };
 
+  const hasWordFiles = filesList.some(f => f.isWord);
+
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs space-y-6">
+    <div id="paper-scanner-container" className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs space-y-6">
       <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
         <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
           <Sparkles className="w-5 h-5" />
         </div>
         <div>
-          <h2 className="text-base font-bold text-slate-800">Scansione AI Tabella Cartacea</h2>
-          <p className="text-xs text-slate-500">Fotografa il tuo foglio quotidiano dei lettini e lascia che Gemini lo digiti per te!</p>
+          <h2 className="text-base font-bold text-slate-800">Scansione AI Multi-File</h2>
+          <p className="text-xs text-slate-500">
+            Carica i file Word o le foto delle pedane (anche più file insieme). Gemini li elaborerà in un'unica griglia.
+          </p>
         </div>
       </div>
 
@@ -217,26 +228,71 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
       )}
 
       {/* Upload area */}
-      {!imagePreview && !isScanning && (
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 text-center cursor-pointer transition-colors bg-slate-50/50"
-        >
-          <Upload className="w-10 h-10 text-slate-400" />
-          <div>
-            <p className="text-sm font-bold text-slate-700">Carica foto della tabella o file Word</p>
-            <p className="text-xs text-slate-400 mt-1">Trascina qui il file (.docx, .doc, immagini) oppure clicca per sfogliare</p>
+      {scannedResults.length === 0 && !isScanning && (
+        <div className="space-y-4">
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className="border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 text-center cursor-pointer transition-colors bg-slate-50/50"
+          >
+            <Upload className="w-10 h-10 text-slate-400" />
+            <div>
+              <p className="text-sm font-bold text-slate-700">Trascina o clicca per caricare i file</p>
+              <p className="text-xs text-slate-400 mt-1">Puoi selezionare più file Word (.docx) o immagini contemporaneamente</p>
+            </div>
+            <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full uppercase">
+              Supporta Immagini e Documenti Word (.docx)
+            </span>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*,.docx,.doc"
+              multiple
+              className="hidden"
+            />
           </div>
-          <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full uppercase">
-            Supporta sia immagini che file Microsoft Word (.docx)
-          </span>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept="image/*,.docx,.doc"
-            className="hidden"
-          />
+
+          {/* List of uploaded files ready for scanning */}
+          {filesList.length > 0 && (
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 space-y-3">
+              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                File selezionati ({filesList.length})
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {filesList.map((file) => (
+                  <div key={file.id} className="flex items-center justify-between bg-white border border-slate-200/60 p-2.5 rounded-lg shadow-2xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className={`w-4 h-4 shrink-0 ${file.isWord ? "text-blue-500" : "text-amber-500"}`} />
+                      <p className="text-xs font-medium text-slate-700 truncate max-w-[180px]">{file.name}</p>
+                    </div>
+                    <button
+                      onClick={() => removeFile(file.id)}
+                      className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-xl mt-2">
+                <h4 className="text-xs font-bold text-indigo-800 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4" /> Lettore Intelligente Gemini
+                </h4>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  L'AI analizzerà i tuoi file in parallelo per estrarre tutti i numeri di lettino, i nomi dei clienti e le fasce orarie. Potrai rivedere e correggere l'elenco prima dell'importazione definitiva.
+                </p>
+              </div>
+
+              <button
+                onClick={handleScanSubmit}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
+              >
+                <Sparkles className="w-5 h-5" />
+                Avvia Analisi Simultanea ({filesList.length} file)
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -245,81 +301,14 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
         <div className="border border-slate-100 rounded-2xl p-8 flex flex-col items-center justify-center text-center space-y-4">
           <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
           <div className="space-y-1">
-            <h3 className="text-sm font-bold text-slate-800">Analisi File in corso</h3>
+            <h3 className="text-sm font-bold text-slate-800">Analisi Multi-File in corso</h3>
             <p className="text-xs text-indigo-600 font-medium animate-pulse">
-              {isWordFile ? "Estrazione del testo dal documento Word..." : steps[scanningStep]}
+              {steps[scanningStep]}
             </p>
           </div>
           <p className="text-[10px] text-slate-400 max-w-sm">
-            {isWordFile 
-              ? "Gemini sta elaborando il testo estratto dal documento Word per identificare i numeri di lettino e le relative prenotazioni."
-              : "Il modello di intelligenza artificiale di Google sta elaborando l'immagine, identificando la struttura dei lettini ed estraendo i nomi."}
+            L'intelligenza artificiale di Google sta elaborando i file caricati per unificare le prenotazioni in un'unica griglia digitale.
           </p>
-        </div>
-      )}
-
-      {/* Preview & Scan Action */}
-      {imagePreview && !isScanning && scannedResults.length === 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="relative rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 flex flex-col items-center justify-center p-6 min-h-[250px] max-h-[350px]">
-            {isWordFile ? (
-              <div className="flex flex-col items-center gap-3 text-center">
-                <FileText className="w-16 h-16 text-blue-600" />
-                <div>
-                  <p className="text-sm font-bold text-slate-800 truncate max-w-[200px]">{fileName}</p>
-                  <p className="text-xs text-slate-400 mt-1">Documento Word Microsoft</p>
-                </div>
-              </div>
-            ) : (
-              <img src={imagePreview} alt="Tabella da scansionare" className="max-w-full max-h-[300px] object-contain" />
-            )}
-            <button
-              onClick={() => {
-                setImagePreview(null);
-                setFileName(null);
-                setIsWordFile(false);
-                if (fileInputRef.current) fileInputRef.current.value = "";
-              }}
-              className="absolute top-3 right-3 bg-slate-900/80 hover:bg-slate-900 text-white p-1.5 rounded-full shadow-md transition-colors cursor-pointer text-xs"
-            >
-              Cambia file
-            </button>
-          </div>
-
-          <div className="flex flex-col justify-center space-y-4">
-            <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-xl">
-              <h4 className="text-xs font-bold text-indigo-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4" /> Lettore Intelligente Gemini
-              </h4>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Premi il pulsante sotto per avviare l'analisi. L'AI estrarrà le informazioni e ti permetterà di rivederle prima di salvarle sul database del sito.
-              </p>
-              <ul className="text-[10px] text-slate-500 mt-3 list-disc list-inside space-y-1">
-                {isWordFile ? (
-                  <>
-                    <li>Analizza elenchi, righe descrittive e tabelle di Word</li>
-                    <li>Riconosce i numeri dei lettini ed associa i nomi</li>
-                    <li>Rileva il tipo di cliente e la fascia oraria dal testo</li>
-                  </>
-                ) : (
-                  <>
-                    <li>Riconosce i numeri dei lettini da 1 a 109</li>
-                    <li>Estrae i nomi scritti a matita o penna</li>
-                    <li>Identifica le diciture "abbonato" o "giornaliero"</li>
-                    <li>Rileva se prenotato per mattina, pomeriggio o giornata intera</li>
-                  </>
-                )}
-              </ul>
-            </div>
-
-            <button
-              onClick={handleScanSubmit}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
-            >
-              <Sparkles className="w-5 h-5" />
-              Inizia Scansione Automatica
-            </button>
-          </div>
         </div>
       )}
 
@@ -451,7 +440,8 @@ export default function PaperScanner({ date, existingBookings, onImportBookings 
             <button
               onClick={() => {
                 setScannedResults([]);
-                setImagePreview(null);
+                setFilesList([]);
+                if (fileInputRef.current) fileInputRef.current.value = "";
               }}
               className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg cursor-pointer"
             >
