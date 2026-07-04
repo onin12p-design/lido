@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "booking": {
+      "title": "Booking",
+      "description": "Represents a beach bed reservation for a specific day and slot",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The unique identifier of the booking"
+        },
+        "bedNumber": {
+          "type": "integer",
+          "description": "The bed number being reserved"
+        },
+        "date": {
+          "type": "string",
+          "format": "date",
+          "description": "The reservation date (YYYY-MM-DD)"
+        },
+        "slot": {
+          "type": "string",
+          "enum": ["morning", "afternoon", "full_day"],
+          "description": "The reserved time slot: morning, afternoon, or full day"
+        },
+        "customerName": {
+          "type": "string",
+          "description": "Name of the customer"
+        },
+        "customerType": {
+          "type": "string",
+          "enum": ["daily", "subscriber"],
+          "description": "Whether the customer is a daily visitor or subscriber"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional notes or comments"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of when the booking was created"
+        }
+      },
+      "required": ["bedNumber", "date", "slot", "customerName", "customerType"]
+    }
+  },
+  "firestore": {
+    "/bookings/{bookingId}": {
+      "schema": "booking",
+      "description": "Collection of all beach bed bookings"
+    }
+  }
+}

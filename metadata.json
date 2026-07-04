@@ -1,0 +1,6 @@
+{
+  "name": "Gestione Prenotazioni Lettini",
+  "description": "Applicazione per la gestione delle prenotazioni dei lettini da spiaggia, con fasce orarie mattina/pomeriggio, gestione di abbonati e clienti giornalieri, inserimento manuale e scansione di fogli cartacei tramite intelligenza artificiale.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

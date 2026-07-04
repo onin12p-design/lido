@@ -1,0 +1,8 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /bookings/{bookingId} {
+      allow read, write: if true; // In development/admin applet, we allow read/write access.
+    }
+  }
+}
